@@ -1,0 +1,482 @@
+/**************************/
+/*********程序來自QQ群：377640799***************/
+#include<reg52.h>
+
+
+#define uchar unsigned char
+#define uint unsigned int
+
+
+sbit busy=P0^7; //忙状态标志
+sbit beep=P1^0; //定义蜂鸣器端，按键释放和整点响
+//sbit dula=P2^6; //申明U1锁存器的锁存端
+//sbit wela=P2^7; //申明U1锁存器的锁存端
+sbit lcden=P2^3; //定义1602液晶LCDEN端,使能信号
+sbit lcdrs=P2^1; //定义1602液晶RS端，数据/命令选择端（H/L）
+sbit lcdrw=P2^2; //定义1602液晶RW端，读/写选择端（H/L）
+sbit s9=P3^0; //增大键16
+sbit s13=P3^1; //功能键12
+sbit s17=P3^2; //减少键8
+sbit s21=P3^3; //退出键4
+//sbit rd=P3^7; //从矩阵键盘分解出独立按键
+uchar yue,ri,shi,fen,miao,week,nian,flag,count; 
+uchar code table[7][3]={"MON","TUE","WED","THU","FRI","SAT","SUN"};
+
+
+void delay(uint x) //毫秒级延时函数
+{
+uint y,z;
+for(y=x;y>0;y--)
+for(z=110;z>0;z--); 
+}
+
+void di(uint dd) //蜂鸣器发声函数
+{
+beep=1;
+delay(dd);
+beep=0;
+}
+
+
+void wait()//LCD1602忙等待
+{
+P0=0xff;//数据口全部置1，为读状态做准备
+lcdrs=0;
+lcdrw=1;
+lcden=1;
+while(busy);//busy=P0^7，它是判断LCD忙状态的标志，
+//当它为0时，LCD闲，允许操作;为1时禁止操作。
+
+
+lcden=0;
+}
+
+
+void write_com(uchar com) //液晶写命令函数
+{
+wait();
+ lcdrw=0;
+lcdrs=0;
+lcden=0;
+P0=com;
+delay(5);
+lcden=1;
+delay(5);
+lcden=0;
+}
+
+
+void write_date(uchar date) //液晶写数据函数
+{
+wait();
+lcdrw=0;
+lcdrs=1; 
+lcden=0;
+P0=date;
+delay(5);
+lcden=1;
+delay(5);
+lcden=0;
+}
+
+
+void write_nian(uchar add,uchar date)reentrant //写年函数；reentrant定义为可重入函数，允许被递归调用
+{
+uint bai,shi,ge;
+bai=date/100;
+shi=date%100/10;
+ge=date%100%10;
+write_com(0x80+add); //设置显示位置 
+write_date(0x30+bai); //0~9对应的字符码是0x30~0x39
+write_date(0x30+shi);
+write_date(0x30+ge);
+}
+
+
+uchar dxy(uchar r) //大小月份设置
+{
+uchar k;
+switch(r)
+{
+case 1:k=31;break; 
+case 2: //闰年29天, 平年28天
+if((2000+nian)%100==0)
+if((2000+nian)%400==0)
+k=29;
+else
+k=28;
+else
+if((2000+nian)%4==0)
+k=29;
+else
+k=28; 
+break; 
+case 3:k=31;break;
+case 4:k=30;break;
+case 5:k=31;break;
+case 6:k=30;break;
+case 7:k=31;break;
+case 8:k=31;break;
+case 9:k=30;break;
+case 10:k=31;break;
+case 11:k=30;break;
+case 12:k=31;break;
+}
+return k;
+}
+
+
+void write_yrsfm(uchar add,uchar date) //写月、日、时、分、秒函数
+{
+uchar shi,ge;
+shi=date/10;
+ge=date%10;
+write_com(0x80+add); //设置显示位置
+write_date(0x30+shi);
+write_date(0x30+ge);
+}
+
+
+void write_week(uchar add,uchar date) //写星期函数
+{
+uchar i;
+write_com(0x80+add); //设置显示位置
+for(i=0;i<3;i++)
+{
+write_date(table[date][i]);
+delay(5);
+}
+}
+
+
+void init() //初始化函数
+{ 
+count=0;
+//rd=0; //软件将矩阵按键第四列一端置低用以分解出独立按键 
+lcdrw=0;
+lcden=0;
+P0=0xff; //关闭发光二极管、数码管
+//wela=0; //关闭两锁存器所存端，防止操作液晶时数码管、点阵出现乱码
+//dula=0;
+write_com(0x38); //设置16*2显示，5*7点阵，8位数据接口
+write_com(0x0c); //设置开显示，不显示光标
+write_com(0x06); //写一个字符后地址指针加1
+write_com(0x01); //显示清零，数据指针清零
+write_com(0x80); //设置显示初始位置
+write_com(0x80+1); //写出年份的最高位“2”
+write_date('2');
+write_com(0x80+5); //写出日期显示部分的的两个“-”
+write_date('-');
+write_com(0x80+8);
+write_date('-'); 
+write_com(0x80+0x40+6); //写出时间显示部分的的两个“：”
+write_date(':');
+write_com(0x80+0x40+9);
+write_date(':');
+miao=0;
+fen=0;
+shi=0;
+week=4;
+write_week(12,week);
+ri=16;
+yue=5;
+nian=14;
+write_yrsfm(0x40+10,miao);//分别送去液晶显示
+write_yrsfm(0x40+7,fen);
+write_yrsfm(0x40+4,shi);
+write_week(12,week);
+write_yrsfm(9,ri);
+write_yrsfm(6,yue);
+write_nian(2,nian);
+TMOD=0x01; //设置定时器0工作模式1 :16位定时器/计数器
+TH0=(65536-45872)/256; //定时器装初值
+TL0=(65536-45872)%256;
+EA=1; //开总中断
+ET0=1; //开定时器0中断
+TR0=1; //启动定时器0
+} 
+
+void keyscan() //按键扫描函数
+{
+if(s13==0) //功能键按下
+{ 
+delay(5); //消抖
+if(s13==0) //功能键确认按下
+{
+flag++; //记录功能键按下次数
+while(!s13); //确认释放功能键
+di(100); //每当有按键释放蜂鸣器发出滴声提醒
+if((flag==1)||(flag==8)) //第一次按下功能键光标闪烁到秒位置
+{
+TR0=0; //关闭定时器
+write_com(0x80+0x40+11); //光标定位到秒位置
+write_com(0x0f); //光标开始闪烁
+} 
+if(flag==2) //第二次按下功能键光标闪烁到分钟位置
+{
+write_com(0x80+0x40+8);
+}
+if(flag==3) //第三次按下功能键光标闪烁到时位置
+{
+write_com(0x80+0x40+5);
+}
+if(flag==4) //第四次按下功能键光标闪烁到星期位置
+{
+write_com(0x80+12);
+}
+ if(flag==5) //第五次按下功能键光标闪烁到日位置
+{
+write_com(0x80+10);
+}
+if(flag==6) //第六次按下功能键光标闪烁到月位置
+{
+write_com(0x80+7);
+}
+if(flag==7) //第七次按下功能键光标闪烁到年位置
+{
+write_com(0x80+4);
+}
+if(flag==8) //第八次按下功能键退出功能键
+flag=1; //记录变成1；光标重新回到秒位置
+}
+}
+if(s21==0) //退出调节
+{delay(5);
+if(s21==0)
+{
+while(!s21); //释放按键
+if(TR0==0)
+di(100); //只在调节时有按键释放蜂鸣器发出滴声
+flag=0; //功能键按键次数清零
+write_com(0x0c); //取消光标闪烁
+TR0=1; //启动定时器
+} 
+}
+if(flag!=0) 
+{
+if(s9==0) //只有功能键按下后，增大和减少键才有效
+{
+delay(5);
+if(s9==0) //确认增加按下
+{
+while(!s9); //释放按键
+di(100); //每当有按键释放蜂鸣器发出滴声提醒
+if(flag==1) //功能键第一次按下调节秒
+{
+miao++; //秒加1
+if(miao>59) 
+miao=0;
+write_yrsfm(0x40+10,miao); //每调节一次送液晶显示一下
+write_com(0x80+0x40+11); //显示位置重新回到调节处
+
+
+}
+if(flag==2) //功能键第二次按下调节分
+{
+fen++; 
+if(fen>59) 
+fen=0;
+write_yrsfm(0x40+7,fen); 
+
+}
+if(flag==3) //功能键第三次按下调节时
+{
+shi++; 
+if(shi>23) 
+shi=0;
+write_yrsfm(0x40+4,shi); 
+write_com(0x80+0x40+5); 
+
+}
+if(flag==4) 
+{
+week++;
+if(week>6)
+week=0;
+write_week(12,week);
+write_com(0x80+12);
+
+
+}
+if(flag==5) //功能键第五次按下调节日
+{
+ri++;
+if(ri>(dxy(yue)))
+ri=1; 
+write_yrsfm(9,ri);
+write_com(0x80+10);
+
+
+}
+if(flag==6) //功能键第六次按下调节月份
+{
+yue++;
+if(yue>12)
+yue=1;
+write_yrsfm(6,yue);
+write_com(0x80+7);
+
+
+}
+if(flag==7)
+{ //功能键第七次按下调节年份
+nian++;
+write_nian(2,nian);
+write_com(0x80+4);
+
+
+}
+}
+}
+if(s17==0)
+{
+delay(5);
+if(s17==0) //确认减少键被按下
+{
+while(!s17); //按键释放
+di(100); //每当有按键释放蜂鸣器发出滴声
+if(flag==1) //功能键第一次按下调节秒
+{ //秒减1
+miao--;
+if((miao==(-1))||(miao>59)) //59到0循环递减；
+miao=59;
+write_yrsfm(0x40+10,miao); //每调节一次送液晶显示一下
+write_com(0x80+0x40+11); //显示位置重新回到调节处
+
+
+}
+if(flag==2) //功能键第二次按下调节分
+{
+fen--;
+if((fen==(-1))||(fen>59))
+fen=59;
+write_yrsfm(0x40+7,fen); 
+write_com(0x80+0x40+8); 
+
+}
+if(flag==3) //功能键第三次按下调节时
+{
+shi--;
+if((shi==(-1))||(shi>23))
+shi=23;
+write_yrsfm(0x40+4,shi); 
+write_com(0x80+0x40+5); 
+
+}
+if(flag==4) //功能键第四次按下调节星期
+{
+week--;
+if((week==(-1))||(week>6))
+week=6;
+write_week(12,week);
+write_com(0x80+12);
+
+}
+if(flag==5) //功能键第五次按下调节日
+{
+ri--;
+if((ri==0)||ri>dxy(yue))
+ri=dxy(yue);
+write_yrsfm(9,ri);
+write_com(0x80+10);
+
+
+}
+if(flag==6) //功能键第六次按下调节月份
+{
+yue--;
+if((yue==0)||(yue>12))
+yue=12;
+write_yrsfm(6,yue);
+write_com(0x80+7);
+
+
+}
+if(flag==7)
+{ //功能键第七次按下调节年份
+nian--;
+write_nian(2,nian);
+write_com(0x80+4);
+
+
+}
+}
+}
+}
+}
+
+
+void main() //主函数
+{
+init();
+while(1) //不停地检测按键是否被按下
+{
+keyscan();
+}
+}
+
+
+void timer0() interrupt 1 //中断函数；定时器0工作模式1 :16位定时器/计数器
+{
+TH0=(65536-45872)/256; //重装初值；65536=2^16(高八位，低八位)，45872=50ms/(12*1/(11.0592MHz))us
+TL0=(65536-45872)%256;
+count++; //count每加一次为50毫秒
+if((ri>dxy(yue))||(ri<1)) //大小月匹配
+ri=1;
+write_yrsfm(9,ri); //日若变化则重新写入
+
+
+if(count==20) //count每加一次判断是否到20次，到20次说明1秒时间到
+{
+count=0; //清零重新再计20次
+miao++; //秒、分、时、星期、日、月、年自动调节功能运行
+if(miao==60)
+{
+miao=0;
+fen++;
+if(fen==60)
+{
+fen=0;
+di(500); //整点提醒
+shi++; 
+if(shi==24)
+{
+shi=0;
+week++;
+ri++;
+if(week>6)
+week=0;
+write_week(12,week); //星期若变化则重新写入
+if(ri>dxy(yue))
+{
+ri=1;
+yue++;
+if(yue==13)
+{
+yue=1;
+nian++;
+write_nian(2,nian); //年份若变化则重新写入
+
+
+}
+write_yrsfm(6,yue); //月份若变化则重新写入
+
+
+}
+write_yrsfm(9,ri); //日若变化则重新写入
+
+
+}
+write_yrsfm(0x40+4,shi); //时若变化则重新写入
+
+
+}
+write_yrsfm(0x40+7,fen); //分若变化则重新写入
+
+
+}
+write_yrsfm(0x40+10,miao); //秒若变化则重新写入
+
+
+}
+} 
